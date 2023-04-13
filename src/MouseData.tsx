@@ -5,6 +5,8 @@ export type MouseDataPoint = {
     dt: number;
     dx: number;
     dy: number;
+    vx: number;
+    vy: number;
 };
 
 export type MouseRawData = {
@@ -20,7 +22,7 @@ export class MouseData {
     smoothed_data: MouseDataPoint[] = [];
     smooth_time: number = 1000 / 144;
     last_frame_time: number = 0;
-    duration: number = 10000.0;
+    duration: number = 100000.0;
     data_output_buffer: MouseDataPoint[] = [];
     smoothed_data_output_buffer: MouseDataPoint[] = [];
 
@@ -81,13 +83,23 @@ export class MouseData {
         let new_data: MouseDataPoint;
         const last_data = this.get_last_data();
         if (last_data === undefined) {
-            new_data = { ...d, x: d.dx, y: d.dy, dt: 0 };
+            const dt = d.t;
+            new_data = { ...d, 
+                x: d.dx, 
+                y: d.dy, 
+                dt: dt, 
+                vx: dt === 0 ? NaN : d.dx / dt, 
+                vy: dt === 0 ? NaN : d.dy / dt
+            };
         } else {
+            const dt = d.t - last_data.t;
             new_data = {
                 ...d,
                 x: last_data.x + d.dx,
                 y: last_data.y + d.dy,
-                dt: d.t - last_data.t,
+                dt: dt,
+                vx: dt === 0 ? NaN : d.dx / dt,
+                vy: dt === 0 ? NaN : d.dy / dt,
             };
         }
         this.data_output_buffer.push(new_data);
@@ -104,7 +116,9 @@ export class MouseData {
             const dt = last_smoothed_data === undefined ? 0 : t - last_smoothed_data.t;
             const x = last_smoothed_data === undefined ? dx : last_smoothed_data.x + dx;
             const y = last_smoothed_data === undefined ? dy : last_smoothed_data.y + dy;
-            const new_data = { t, x, y, dt, dx, dy }
+            const vx = dt === 0 ? NaN : dx / dt;
+            const vy = dt === 0 ? NaN : dy / dt;
+            const new_data = { t, x, y, dt, dx, dy, vx, vy }
             this.smoothed_data_output_buffer.push(new_data);
             this.smooth_buffer = [];
             this.last_frame_time = Math.ceil(d.t / this.smooth_time) * this.smooth_time;

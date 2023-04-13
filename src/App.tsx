@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";;
+import { ChangeEvent, MutableRefObject, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";;
 import { invoke } from "@tauri-apps/api/tauri";
 import {
   Chart as ChartJS,
@@ -12,15 +12,16 @@ import {
   Tooltip,
   Legend,
   Decimation,
+  Point,
 } from 'chart.js';
 import type { DecimationOptions } from 'chart.js';
-import { Chart } from 'react-chartjs-2';
+import { Chart, Line } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { ZoomPluginOptions } from 'chartjs-plugin-zoom/types/options';
 ChartJS.register(zoomPlugin);
 import "./App.css";
 import { MouseData, MouseRawData, MouseDataPoint } from './MouseData';
-import { clear } from "console";
+import { ChartJSOrUndefined } from "react-chartjs-2/dist/types";
 
 ChartJS.register(
   PointElement,
@@ -38,10 +39,10 @@ ChartJS.register(
 
 const decimationOption: DecimationOptions = {
   enabled: true,
-  threshold: 100,
-  algorithm: 'min-max'
+  threshold: 500,
   // algorithm: 'lttb',
-  // samples: 1000,
+  // samples: 100,
+  algorithm: 'min-max'
 };
 const zoomOption: ZoomPluginOptions = {
   zoom: {
@@ -49,6 +50,10 @@ const zoomOption: ZoomPluginOptions = {
       enabled: true,
     },
     pinch: {
+      enabled: true,
+    },
+    drag: {
+      modifierKey: "ctrl",
       enabled: true,
     },
     mode: 'xy',
@@ -65,7 +70,6 @@ const CHARTOPTION = {
     axis: "x" as const,
     intersect: false as const,
   },
-  spanGaps: true as const,
   normalized: true as const,
   parsing: false as const,
   responsive: true as const,
@@ -75,10 +79,10 @@ const CHARTOPTION = {
       type: 'linear' as const,
     },
   },
-    plugins: {
-      decimation: decimationOption,
-      zoom: zoomOption,
-    }
+  plugins: {
+    decimation: decimationOption,
+    zoom: zoomOption,
+  }
 };
 
 const CHARTOPTION_XY = {
@@ -92,9 +96,9 @@ const CHARTOPTION_XY = {
       type: 'linear' as const,
     },
   },
-    plugins: {
-      zoom: zoomOption,
-    }
+  plugins: {
+    zoom: zoomOption,
+  }
 };
 
 
@@ -115,37 +119,43 @@ function useInterval(callback: () => void, delay: number) {
   }, [delay]);
 }
 
-function App() {
-  const chartRef: any = useRef(null);
-  const mouseDatabase = useRef<MouseData>(new MouseData());
-  const [flags, setFlags] = useState({
-    freezed: true,
-    dataSelect: 'x',
-    smoothFPS: '144',
-    started: false,
-  });
-  // const [freezed, setFreezed] = useState(true);
-  // const [dataSelect, setDataSelect] = useState('x');
-  // const [smoothFPS, setSmoothFPS] = useState('144');
-  // const [started, setStarted] = useState(false);
-
-  const dataset: any = useRef({
+function make_mouse_dataset(rawData: Point[], smoothedData: Point[]) {
+  return {
     labels: [],
     datasets: [
       {
+        hidden: true,
         label: "raw",
-        data: [],
+        data: rawData,
         borderColor: 'rgb(53, 162, 235)',
+        pointStyle: 'rect',
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
       },
       {
         label: "smoothed",
-        data: [],
+        data: smoothedData,
         borderColor: 'rgb(75, 192, 192)',
         backgroundColor: 'rgba(75, 192, 192, 0.5)',
       }
     ]
-  });
+  };
+}
+
+function App() {
+  const mouseDatabase = useRef<MouseData>(new MouseData());
+
+  // const [rawData, setRawData] = useState<Point[]>([]);
+  // const [smoothedData, setSmoothedData] = useState<Point[]>([]);
+  const rawData = useRef<Point[]>([]);
+  const smoothedData = useRef<Point[]>([]);
+  const dataset = useRef(make_mouse_dataset([], []));
+  const options = useRef({...CHARTOPTION, data: make_mouse_dataset([], [])})
+  const [freezed, setFreezed] = useState(true);
+  const [dataSelect, setDataSelect] = useState('x');
+  const [smoothFPS, setSmoothFPS] = useState(144);
+  const [started, setStarted] = useState(false);
+  const [updateInterval, SetUpdateInterval] = useState(200);
+  const chartRef = useRef<ChartJSOrUndefined<'line', Point[], unknown>>(null);
 
   const select_axes: {[key: string]: {x: keyof MouseDataPoint, y: keyof MouseDataPoint}} = {
     x: {x: 't' as const, y: 'x' as const},
@@ -153,6 +163,8 @@ function App() {
     xy: {x: 'x' as const, y: 'y' as const},
     dx: {x: 't' as const, y: 'dx' as const},
     dy: {x: 't' as const, y: 'dy' as const},
+    vx: {x: 't' as const, y: 'vx' as const},
+    vy: {x: 't' as const, y: 'vy' as const},
     dt: {x: 't' as const, y: 'dt' as const},
   };
 
@@ -161,52 +173,68 @@ function App() {
       d.map((x) => {mouseDatabase.current.push(x)});
   }
 
-  const regenerate_chart = (axes: {x: keyof MouseDataPoint, y: keyof MouseDataPoint}) => {
-      dataset.current!.datasets[0]!.data = mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
-      dataset.current!.datasets[1]!.data = mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
-      chartRef.current!.data = dataset.current;
-      chartRef.current!.update();
-  }
-
-  useInterval(async () => {
-    await update_data();
-    if (!flags.freezed) {
-      mouseDatabase.current.flush_output_buffer();
-      regenerate_chart(select_axes[flags.dataSelect]);
-    }
-  }, 500);
+  useEffect( () => {
+    mouseDatabase.current.set_smooth_time(1000 / smoothFPS);
+  }, [smoothFPS]);
 
   const clear_data = () => {
-    dataset.current!.datasets[0]!.data = [];
-    dataset.current!.datasets[1]!.data = [];
-    mouseDatabase.current.clear();
+      invoke('log_restart');
+      mouseDatabase.current!.clear();
+  }
+
+  useEffect( () => {
+    if (started) {
+      clear_data();
+    } else {
+      mouseDatabase.current.flush_output_buffer();
+      setFreezed(true);
+    }
+  }, [started]);
+
+  const update_chart = (rawData: Point[], smoothedData: Point[]) => {
+    dataset.current.datasets[0].data = rawData;
+    dataset.current.datasets[1].data = smoothedData;
+    chartRef.current!.data = dataset.current;
+    chartRef.current!.update();
   };
 
-  const toggle_start = async () => {
-    setFlags(flags => {
-      let v = select_axes[flags.dataSelect];
-      if (flags.started) {
-        mouseDatabase.current.flush_output_buffer();
-        regenerate_chart(v);
-        return {...flags, started: false, freezed: true};
-      } else {
-        regenerate_chart(v);
-        invoke('log_restart');
-        clear_data();
-        return {...flags, started: true};
-      }
-    })
+  useEffect( () => {
+    mouseDatabase.current.flush_output_buffer();
+    const axes = select_axes[dataSelect];
+    rawData.current = mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
+    smoothedData.current = mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
+    if (dataSelect === 'xy') {
+      chartRef.current!.options = {...CHARTOPTION_XY};
+    } else {
+      chartRef.current!.options = {...CHARTOPTION};
+    }
+    update_chart(rawData.current, smoothedData.current)
+    // setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+    // setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+  }, [dataSelect, smoothFPS, started]);
+
+  useInterval(async () => {
+    if(!freezed || started) {
+      await update_data();
+    }
+    if (!freezed) {
+      mouseDatabase.current.flush_output_buffer();
+      const axes = select_axes[dataSelect];
+      rawData.current = mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
+      smoothedData.current = mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
+      update_chart(rawData.current, smoothedData.current)
+      // setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+      // setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+    }
+  }, updateInterval);
+
+
+  const toggle_start = () => {
+    setStarted(started => !started);
   };
 
   const toggle_freeze = () => {
-    setFlags(flags => {
-      const freezed = flags.freezed;
-      if (!freezed) {
-        regenerate_chart(select_axes[flags.dataSelect]);
-      }
-      return { ...flags, freezed: !freezed };
-    }
-    );
+    setFreezed(freezed => !freezed);
   };
 
   const resetZoom = () => {
@@ -224,36 +252,11 @@ function App() {
       case 'KeyZ':
         resetZoom();
         break;
+      case 'KeyR':
+        clear_data();
+        break;
     }
   };
-
-  const onDataSelected = (e: ChangeEvent<HTMLSelectElement>) => {
-    setFlags(flags => {
-      let v = e.target.value;
-      const op = chartRef.current!.options
-      if (v === 'xy') {
-        console.log(chartRef.current!.options);
-        chartRef.current!.options = { ...CHARTOPTION_XY, data: dataset.current };
-        console.log(chartRef.current!.options);
-      } else {
-        chartRef.current!.options = { ...CHARTOPTION, data: dataset.current };
-      }
-      regenerate_chart(select_axes[v]);
-      return {...flags, dataSelect: v};
-    })
-  };
-
-  const onSmoothFPSChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setFlags(flags => {
-      let v = parseInt(e.target.value);
-      if (!isNaN(v)) {
-        mouseDatabase.current.set_smooth_time(1000.0 / v);
-        regenerate_chart(select_axes[flags.dataSelect]);
-      }
-      return { ...flags, smoothFPS: e.target.value }
-    });
-  };
-
 
   useEffect(() => {
     window.addEventListener('keydown', onKeyDown);
@@ -267,29 +270,32 @@ function App() {
   
   return (
     <div> 
-      <Chart ref={chartRef} type='line' data={dataset.current} options={CHARTOPTION} />
-      <button onClick={() => { toggle_start }}>{flags.started ? 'stop (S)' : 'start (S)'}</button>
-      <button onClick={toggle_freeze}>{flags.freezed ? 'realtime (F)' : 'freeze (F)'}</button>
+      <Chart type='line' ref={chartRef} data={dataset.current} options={options.current} />
+      <button onClick={() => { toggle_start }}>{started ? 'stop (S)' : 'start (S)'}</button>
+      <button onClick={toggle_freeze}>{freezed ? 'realtime (F)' : 'freeze (F)'}</button>
+      <button onClick={clear_data}>reset (R)</button>
       <button onClick={() => { resetZoom(); }}>reset zoom (Z)</button>
-      <label>data:
+      <label>&nbsp;&nbsp;data:
         <select
-          value={flags.dataSelect}
-          onChange={onDataSelected}
+          value={dataSelect}
+          onChange={(e) => setDataSelect(e.target.value)}
         >
           <option value='x'>x</option>
           <option value='y'>y</option>
           <option value='xy'>xy</option>
+          <option value='vx'>vx</option>
+          <option value='vy'>vy</option>
           <option value='dx'>dx</option>
           <option value='dy'>dy</option>
           <option value='dt'>dt</option>
         </select>
       </label>
-      <label>FPS
+      <label>&nbsp;&nbsp;smooth FPS
         <input
-          type='text' value={flags.smoothFPS}
-          onChange={onSmoothFPSChange}
+          type='text' value={smoothFPS}
         />
       </label>
+      <p>drag while holding ctrl to zoom in the selected area.</p>
     </div>
   );
 }
