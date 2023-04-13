@@ -1,0 +1,29 @@
+[package]
+name = "mousesniff"
+version = "0.0.0"
+description = "A Tauri App"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "1.2.1", features = [] }
+
+[dependencies]
+#tauri = { version = "2.0.0-alpha.4", features = ["shell-open"] }
+tauri = { version = "1.2.4", features = ["shell-open"] }
+tauri-runtime = { version = ">=0.0.0" }
+tao = { version = ">=0.0.0", default-features = false, features = [ "serde" ] }
+wry = { version = ">=0.0.0", default-features = false, features = [ "file-drop", "protocol" ] }
+tauri-runtime-wry = { version = ">=0.0.0" }
+serde = { version = ">=0.0.0", features = ["derive"] }
+serde_json = { version = ">=0.0.0" }
+multiinput = { git = "https://github.com/Jonesey13/multiinput-rust" }
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
