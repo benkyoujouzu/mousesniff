@@ -1,4 +1,4 @@
-import { ChangeEvent, MutableRefObject, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";;
+import { ChangeEvent, useEffect, useRef, useState } from "react";;
 import { invoke } from "@tauri-apps/api/tauri";
 import {
   Chart as ChartJS,
@@ -15,7 +15,7 @@ import {
   Point,
 } from 'chart.js';
 import type { DecimationOptions } from 'chart.js';
-import { Chart, Line } from 'react-chartjs-2';
+import { Chart} from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { ZoomPluginOptions } from 'chartjs-plugin-zoom/types/options';
 ChartJS.register(zoomPlugin);
@@ -144,17 +144,14 @@ function make_mouse_dataset(rawData: Point[], smoothedData: Point[]) {
 function App() {
   const mouseDatabase = useRef<MouseData>(new MouseData());
 
-  // const [rawData, setRawData] = useState<Point[]>([]);
-  // const [smoothedData, setSmoothedData] = useState<Point[]>([]);
-  const rawData = useRef<Point[]>([]);
-  const smoothedData = useRef<Point[]>([]);
-  const dataset = useRef(make_mouse_dataset([], []));
-  const options = useRef({...CHARTOPTION, data: make_mouse_dataset([], [])})
+  const [rawData, setRawData] = useState<Point[]>([]);
+  const [smoothedData, setSmoothedData] = useState<Point[]>([]);
   const [freezed, setFreezed] = useState(true);
   const [dataSelect, setDataSelect] = useState('x');
   const [smoothFPS, setSmoothFPS] = useState(144);
   const [started, setStarted] = useState(false);
-  const [updateInterval, SetUpdateInterval] = useState(200);
+  const [updateInterval, setUpdateInterval] = useState(200);
+  const [maxLogDuration, setMaxLogDuration] = useState(100000);
   const chartRef = useRef<ChartJSOrUndefined<'line', Point[], unknown>>(null);
 
   const select_axes: {[key: string]: {x: keyof MouseDataPoint, y: keyof MouseDataPoint}} = {
@@ -167,15 +164,6 @@ function App() {
     vy: {x: 't' as const, y: 'vy' as const},
     dt: {x: 't' as const, y: 'dt' as const},
   };
-
-  const update_data = async () => {
-      let d: MouseRawData[] = await invoke("get_mouse_data");
-      d.map((x) => {mouseDatabase.current.push(x)});
-  }
-
-  useEffect( () => {
-    mouseDatabase.current.set_smooth_time(1000 / smoothFPS);
-  }, [smoothFPS]);
 
   const clear_data = () => {
       invoke('log_restart');
@@ -191,40 +179,37 @@ function App() {
     }
   }, [started]);
 
-  const update_chart = (rawData: Point[], smoothedData: Point[]) => {
-    dataset.current.datasets[0].data = rawData;
-    dataset.current.datasets[1].data = smoothedData;
-    chartRef.current!.data = dataset.current;
+  useEffect( () => {
+    mouseDatabase.current.set_smooth_time(1000 / smoothFPS);
+  }, [smoothFPS]);
+
+  useEffect( () => {
+    // react-chartjs-v2 seems buggy on options
+    if (dataSelect === 'xy') {
+      chartRef.current!.options = CHARTOPTION_XY;
+    } else {
+      chartRef.current!.options = CHARTOPTION;
+    }
     chartRef.current!.update();
-  };
+  }, [dataSelect])
 
   useEffect( () => {
     mouseDatabase.current.flush_output_buffer();
     const axes = select_axes[dataSelect];
-    rawData.current = mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
-    smoothedData.current = mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
-    if (dataSelect === 'xy') {
-      chartRef.current!.options = {...CHARTOPTION_XY};
-    } else {
-      chartRef.current!.options = {...CHARTOPTION};
-    }
-    update_chart(rawData.current, smoothedData.current)
-    // setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
-    // setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+    setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+    setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
   }, [dataSelect, smoothFPS, started]);
 
   useInterval(async () => {
+    const d: MouseRawData[] = await invoke("get_mouse_data");
     if(!freezed || started) {
-      await update_data();
+      d.map((x) => {mouseDatabase.current.push(x)});
     }
     if (!freezed) {
       mouseDatabase.current.flush_output_buffer();
       const axes = select_axes[dataSelect];
-      rawData.current = mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
-      smoothedData.current = mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
-      update_chart(rawData.current, smoothedData.current)
-      // setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
-      // setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+      setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+      setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
     }
   }, updateInterval);
 
@@ -267,10 +252,32 @@ function App() {
       invoke('log_mouse_event');
   }, []);
 
+  const onSmoothFPSChange = (e: ChangeEvent<HTMLInputElement>) => {
+    let v = parseInt(e.target.value);
+    if (!isNaN(v)) {
+      setSmoothFPS(v);
+    }
+  }
+
+  const onUpdateIntervalChange = (e: ChangeEvent<HTMLInputElement>) => {
+    let v = parseInt(e.target.value);
+    if (!isNaN(v)) {
+      setUpdateInterval(v);
+    }
+  }
+
+  const onMaxLogDurationChange = (e: ChangeEvent<HTMLInputElement>) => {
+    let v = parseInt(e.target.value);
+    if (!isNaN(v)) {
+      setMaxLogDuration(v);
+      mouseDatabase.current!.set_duration(v);
+    }
+  }
+
   
   return (
     <div> 
-      <Chart type='line' ref={chartRef} data={dataset.current} options={options.current} />
+      <Chart type='line' ref={chartRef} data={make_mouse_dataset(rawData, smoothedData)} options={CHARTOPTION} />
       <button onClick={() => { toggle_start }}>{started ? 'stop (S)' : 'start (S)'}</button>
       <button onClick={toggle_freeze}>{freezed ? 'realtime (F)' : 'freeze (F)'}</button>
       <button onClick={clear_data}>reset (R)</button>
@@ -290,11 +297,34 @@ function App() {
           <option value='dt'>dt</option>
         </select>
       </label>
-      <label>&nbsp;&nbsp;smooth FPS
+      <div>
+      <label>&nbsp;&nbsp;smoothFPS:
         <input
-          type='text' value={smoothFPS}
+          type='text' 
+          value={smoothFPS}
+          onChange={onSmoothFPSChange}
+          style={{width: "3em"}}
         />
       </label>
+      <label>&nbsp;&nbsp;updateInterval:
+        <input
+          type='text' 
+          value={updateInterval}
+          onChange={onUpdateIntervalChange}
+          style={{width: "3em"}}
+        />
+        ms
+      </label>
+      <label>&nbsp;&nbsp;maxLogTime:
+        <input
+          type='text' 
+          value={maxLogDuration}
+          onChange={onMaxLogDurationChange}
+          style={{width: "5em"}}
+        />
+        ms
+      </label>
+</div>
       <p>drag while holding ctrl to zoom in the selected area.</p>
     </div>
   );

@@ -151,7 +151,7 @@ export class MouseData {
         this.last_frame_time = 0;
     }
 
-    public setDuration(d: number) {
+    public set_duration(d: number) {
         this.duration = d;
     }
 }
