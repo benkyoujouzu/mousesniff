@@ -118,10 +118,16 @@ function useInterval(callback: () => void, delay: number) {
 function App() {
   const chartRef: any = useRef(null);
   const mouseDatabase = useRef<MouseData>(new MouseData());
-  const [freezed, setFreezed] = useState(false);
-  const [dataSelect, setDataSelect] = useState('x');
-  const [smoothFPS, setSmoothFPS] = useState('144');
-  const [started, setStarted] = useState(false);
+  const [flags, setFlags] = useState({
+    freezed: true,
+    dataSelect: 'x',
+    smoothFPS: '144',
+    started: false,
+  });
+  // const [freezed, setFreezed] = useState(true);
+  // const [dataSelect, setDataSelect] = useState('x');
+  // const [smoothFPS, setSmoothFPS] = useState('144');
+  // const [started, setStarted] = useState(false);
 
   const dataset: any = useRef({
     labels: [],
@@ -164,9 +170,9 @@ function App() {
 
   useInterval(async () => {
     await update_data();
-    if (!freezed) {
+    if (!flags.freezed) {
       mouseDatabase.current.flush_output_buffer();
-      regenerate_chart(select_axes[dataSelect]);
+      regenerate_chart(select_axes[flags.dataSelect]);
     }
   }, 500);
 
@@ -176,53 +182,76 @@ function App() {
     mouseDatabase.current.clear();
   };
 
-  const restart = async () => {
-    if (started) {
-      await invoke('log_restart');
-      clear_data();
-    } else {
-      setStarted(true);
-      await invoke('log_mouse_event');
-      clear_data()
-    }
+  const toggle_start = async () => {
+    setFlags(flags => {
+      let v = select_axes[flags.dataSelect];
+      if (flags.started) {
+        mouseDatabase.current.flush_output_buffer();
+        regenerate_chart(v);
+        return {...flags, started: false, freezed: true};
+      } else {
+        regenerate_chart(v);
+        invoke('log_restart');
+        clear_data();
+        return {...flags, started: true};
+      }
+    })
   };
 
   const toggle_freeze = () => {
-    setFreezed(freezed => !freezed);
+    setFlags(flags => {
+      const freezed = flags.freezed;
+      if (!freezed) {
+        regenerate_chart(select_axes[flags.dataSelect]);
+      }
+      return { ...flags, freezed: !freezed };
+    }
+    );
   };
+
+  const resetZoom = () => {
+    chartRef.current!.resetZoom();
+  }
 
   const onKeyDown = (e: KeyboardEvent) => {
     switch (e.code) {
-      case 'KeyR':
-        restart();
+      case 'KeyS':
+        toggle_start();
         break;
       case 'KeyF':
         toggle_freeze();
+        break;
+      case 'KeyZ':
+        resetZoom();
         break;
     }
   };
 
   const onDataSelected = (e: ChangeEvent<HTMLSelectElement>) => {
-    let v = e.target.value;
-    setDataSelect(v);
-    const op = chartRef.current!.options
-    if (v === 'xy') {
-      console.log(chartRef.current!.options);
-      chartRef.current!.options = { ...CHARTOPTION_XY, data: dataset.current };
-      console.log(chartRef.current!.options);
-    } else {
-      chartRef.current!.options = { ...CHARTOPTION, data: dataset.current };
-    }
-    regenerate_chart(select_axes[v]);
+    setFlags(flags => {
+      let v = e.target.value;
+      const op = chartRef.current!.options
+      if (v === 'xy') {
+        console.log(chartRef.current!.options);
+        chartRef.current!.options = { ...CHARTOPTION_XY, data: dataset.current };
+        console.log(chartRef.current!.options);
+      } else {
+        chartRef.current!.options = { ...CHARTOPTION, data: dataset.current };
+      }
+      regenerate_chart(select_axes[v]);
+      return {...flags, dataSelect: v};
+    })
   };
 
   const onSmoothFPSChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setSmoothFPS(e.target.value);
-    let v = parseInt(e.target.value);
-    if (!isNaN(v)) {
-      mouseDatabase.current.set_smooth_time(1000.0 / v);
-      regenerate_chart(select_axes[dataSelect]);
-    }
+    setFlags(flags => {
+      let v = parseInt(e.target.value);
+      if (!isNaN(v)) {
+        mouseDatabase.current.set_smooth_time(1000.0 / v);
+        regenerate_chart(select_axes[flags.dataSelect]);
+      }
+      return { ...flags, smoothFPS: e.target.value }
+    });
   };
 
 
@@ -231,16 +260,20 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  useEffect(() => {
+      invoke('log_mouse_event');
+  }, []);
+
   
   return (
     <div> 
       <Chart ref={chartRef} type='line' data={dataset.current} options={CHARTOPTION} />
-      <button onClick={() => { restart(); }}>{started ? 'restart (R)' : 'start (R)'}</button>
-      <button onClick={toggle_freeze}>{freezed ? 'unfreeze (F)' : 'freeze (F)'}</button>
-      <button onClick={() => { chartRef.current!.resetZoom(); }}>reset zoom</button>
+      <button onClick={() => { toggle_start }}>{flags.started ? 'stop (S)' : 'start (S)'}</button>
+      <button onClick={toggle_freeze}>{flags.freezed ? 'realtime (F)' : 'freeze (F)'}</button>
+      <button onClick={() => { resetZoom(); }}>reset zoom (Z)</button>
       <label>data:
         <select
-          value={dataSelect}
+          value={flags.dataSelect}
           onChange={onDataSelected}
         >
           <option value='x'>x</option>
@@ -253,7 +286,7 @@ function App() {
       </label>
       <label>FPS
         <input
-          type='text' value={smoothFPS}
+          type='text' value={flags.smoothFPS}
           onChange={onSmoothFPSChange}
         />
       </label>

@@ -9,7 +9,7 @@ use std::{
 use tao::{
     self,
     event::{DeviceEvent, Event},
-    event_loop::{DeviceEventFilter, EventLoop},
+    event_loop::{ControlFlow, DeviceEventFilter, EventLoop},
     platform::windows::EventLoopExtWindows,
 };
 use tauri::State;
@@ -33,7 +33,8 @@ fn log_mouse_event(state: State<Arc<Mutex<Database>>>) {
         let event_loop: EventLoop<()> = EventLoop::new_any_thread();
         event_loop.set_device_event_filter(DeviceEventFilter::Never);
 
-        event_loop.run(move |event, _, _control_flow| {
+        event_loop.run(move |event, _, control_flow| {
+            *control_flow = ControlFlow::Wait;
             match event {
                 Event::DeviceEvent {
                     device_id: _,
