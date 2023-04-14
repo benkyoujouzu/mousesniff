@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
-    collections::VecDeque,
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::SystemTime,
@@ -80,7 +79,7 @@ struct MouseRawData {
 }
 
 struct Database {
-    mouse_data: VecDeque<MouseRawData>,
+    mouse_data: Vec<MouseRawData>,
     log_start_time: SystemTime,
     log_thread: Option<JoinHandle<()>>,
 }
@@ -88,7 +87,7 @@ struct Database {
 impl Database {
     fn new() -> Self {
         Database {
-            mouse_data: VecDeque::with_capacity(100000),
+            mouse_data: Vec::with_capacity(10000),
             log_start_time: SystemTime::now(),
             log_thread: None,
         }
@@ -96,7 +95,7 @@ impl Database {
 
     fn push_mouse_data(&mut self, d: MouseRawData) {
         let data = &mut self.mouse_data;
-        data.push_back(d);
+        data.push(d);
     }
 
     fn get_mouse_data(&mut self) -> Vec<MouseRawData> {

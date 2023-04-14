@@ -14,14 +14,12 @@ import {
   Decimation,
   Point,
 } from 'chart.js';
-import type { DecimationOptions } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
-import { ZoomPluginOptions } from 'chartjs-plugin-zoom/types/options';
-ChartJS.register(zoomPlugin);
 import "./App.css";
 import { MouseData, MouseRawData, MouseDataPoint } from './MouseData';
 import { ChartJSOrUndefined } from "react-chartjs-2/dist/types";
+import { make_chart_options } from "./utils";
 
 ChartJS.register(
   PointElement,
@@ -36,71 +34,6 @@ ChartJS.register(
   Decimation,
   zoomPlugin,
 );
-
-const decimationOption: DecimationOptions = {
-  enabled: true,
-  threshold: 500,
-  // algorithm: 'lttb',
-  // samples: 100,
-  algorithm: 'min-max'
-};
-const zoomOption: ZoomPluginOptions = {
-  zoom: {
-    wheel: {
-      enabled: true,
-    },
-    pinch: {
-      enabled: true,
-    },
-    drag: {
-      modifierKey: "ctrl",
-      enabled: true,
-    },
-    mode: 'xy',
-  },
-  pan: {
-    enabled: true,
-    mode: 'xy',
-  },
-
-}
-const CHARTOPTION = {
-  interaction: {
-    mode: "nearest" as const,
-    axis: "x" as const,
-    intersect: false as const,
-  },
-  normalized: true as const,
-  parsing: false as const,
-  responsive: true as const,
-  animation: false as const,
-  scales: {
-    x: {
-      type: 'linear' as const,
-    },
-  },
-  plugins: {
-    decimation: decimationOption,
-    zoom: zoomOption,
-  }
-};
-
-const CHARTOPTION_XY = {
-  interaction: {
-  },
-  normalized: false as const,
-  responsive: true as const,
-  animation: false as const,
-  scales: {
-    x: {
-      type: 'linear' as const,
-    },
-  },
-  plugins: {
-    zoom: zoomOption,
-  }
-};
-
 
 function useInterval(callback: () => void, delay: number) {
   const savedCallback = useRef<() => void>(callback);
@@ -119,12 +52,13 @@ function useInterval(callback: () => void, delay: number) {
   }, [delay]);
 }
 
-function make_mouse_dataset(rawData: Point[], smoothedData: Point[]) {
+function make_mouse_dataset(rawData: Point[], smoothedData: Point[], showLine: boolean) {
   return {
     labels: [],
     datasets: [
       {
         hidden: true,
+        showLine: showLine,
         label: "raw",
         data: rawData,
         borderColor: 'rgb(53, 162, 235)',
@@ -132,6 +66,7 @@ function make_mouse_dataset(rawData: Point[], smoothedData: Point[]) {
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
       },
       {
+        showLine: showLine,
         label: "smoothed",
         data: smoothedData,
         borderColor: 'rgb(75, 192, 192)',
@@ -143,7 +78,9 @@ function make_mouse_dataset(rawData: Point[], smoothedData: Point[]) {
 
 function App() {
   const mouseDatabase = useRef<MouseData>(new MouseData());
-
+  const [decimationMethod, setDecimationMethod] = useState<'none' | 'min-max' | 'lttb'>('min-max');
+  const [showLine, setShowLine] = useState(true);
+  const [chartOptions, setChartOptions] = useState(make_chart_options('xy', 'min-max'));
   const [rawData, setRawData] = useState<Point[]>([]);
   const [smoothedData, setSmoothedData] = useState<Point[]>([]);
   const [freezed, setFreezed] = useState(true);
@@ -171,6 +108,10 @@ function App() {
   }
 
   useEffect(() => {
+    setChartOptions({ ...make_chart_options(dataSelect, decimationMethod) });
+  }, [dataSelect, decimationMethod]);
+
+  useEffect(() => {
     if (started) {
       clear_data();
     } else {
@@ -181,16 +122,6 @@ function App() {
   useEffect(() => {
     mouseDatabase.current.set_smooth_time(1000 / smoothFPS);
   }, [smoothFPS]);
-
-  useEffect(() => {
-    // react-chartjs-v2 seems buggy on options
-    if (dataSelect === 'xy') {
-      chartRef.current!.options = CHARTOPTION_XY;
-    } else {
-      chartRef.current!.options = CHARTOPTION;
-    }
-    chartRef.current!.update();
-  }, [dataSelect])
 
   useEffect(() => {
     const axes = select_axes[dataSelect];
@@ -209,7 +140,6 @@ function App() {
       setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
     }
   }, updateInterval);
-
 
   const toggle_start = () => {
     setStarted(started => !started);
@@ -278,6 +208,7 @@ function App() {
     link.download = "mouse_data.json";
     link.click();
   };
+
   const exportSmoothedData = () => {
     const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(mouseDatabase.current!.smoothed_data))}`;
     const link = document.createElement("a");
@@ -288,28 +219,36 @@ function App() {
 
   return (
     <div>
-      <Chart type='line' ref={chartRef} data={make_mouse_dataset(rawData, smoothedData)} options={CHARTOPTION} />
-      <button onClick={() => { toggle_start }}>{started ? 'stop (S)' : 'start (S)'}</button>
-      <button onClick={toggle_freeze}>{freezed ? 'realtime (F)' : 'freeze (F)'}</button>
-      <button onClick={clear_data}>reset (R)</button>
-      <button onClick={() => { resetZoom(); }}>reset zoom (Z)</button>
-      <label>&nbsp;&nbsp;data:
-        <select
-          value={dataSelect}
-          onChange={(e) => setDataSelect(e.target.value)}
-        >
-          <option value='x'>x</option>
-          <option value='y'>y</option>
-          <option value='xy'>xy</option>
-          <option value='vx'>vx</option>
-          <option value='vy'>vy</option>
-          <option value='dx'>dx</option>
-          <option value='dy'>dy</option>
-          <option value='dt'>dt</option>
-        </select>
-      </label>
-      <div>
-        <label>&nbsp;&nbsp;smoothFPS:
+      <Chart type='line' ref={chartRef} data={make_mouse_dataset(rawData, smoothedData, showLine)} options={chartOptions} />
+      <form>
+        <button onClick={() => { toggle_start }}>{started ? 'Stop (S)' : 'Start (S)'}</button>
+        <button onClick={toggle_freeze}>{freezed ? 'Realtime (F)' : 'Freeze (F)'}</button>
+        <button onClick={clear_data}>Reset (R)</button>
+        <button onClick={() => { resetZoom(); }}>ResetZoom (Z)</button>
+        <br />
+        <label>Data:
+          <select
+            value={dataSelect}
+            onChange={(e) => setDataSelect(e.target.value)}
+          >
+            <option value='x'>x</option>
+            <option value='y'>y</option>
+            <option value='xy'>xy</option>
+            <option value='vx'>vx</option>
+            <option value='vy'>vy</option>
+            <option value='dx'>dx</option>
+            <option value='dy'>dy</option>
+            <option value='dt'>dt</option>
+          </select>
+        </label>
+        <label>ShowLine:
+          <input
+            type='checkbox'
+            checked={showLine}
+            onChange={() => setShowLine(showLine => !showLine)}
+          />
+        </label>
+        <label>SmoothFPS:
           <input
             type='text'
             value={smoothFPS}
@@ -317,7 +256,7 @@ function App() {
             style={{ width: "3em" }}
           />
         </label>
-        <label>&nbsp;&nbsp;updateInterval:
+        <label>UpdateInterval:
           <input
             type='text'
             value={updateInterval}
@@ -326,7 +265,7 @@ function App() {
           />
           ms
         </label>
-        <label>&nbsp;&nbsp;maxLogTime:
+        <label>MaxLogTime:
           <input
             type='text'
             value={maxLogDuration}
@@ -335,13 +274,22 @@ function App() {
           />
           ms
         </label>
-        <div>
-        <button onClick={exportRawData}>exportRawData</button>
-        &nbsp;&nbsp;
-        <button onClick={exportSmoothedData}>exportSmoothedData</button>
-        </div>
-      </div>
+        <br />
+        <button onClick={exportRawData}>ExportRawData</button>
+        <button onClick={exportSmoothedData}>ExportSmoothedData</button>
+        <br />
+        <label>DecimationMethod:
+          <select
+            value={decimationMethod}
+            onChange={(e) => { const v = e.target.value; if (v === 'none' || v === 'min-max' || v === 'lttb') setDecimationMethod(v); }}>
+            <option value={'none'}>none</option>
+            <option value={'min-max'}>min-max</option>
+            <option value={'lttb'}>lttb</option>
+          </select>
+        </label>
+      </form>
       <p>drag while holding ctrl to zoom in the selected area.</p>
+      <p>Change DecimationMethod to lttb for performance problem.</p>
     </div>
   );
 }
