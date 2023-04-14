@@ -233,11 +233,11 @@ function App() {
           >
             <option value='x'>x</option>
             <option value='y'>y</option>
+            <option value='dx'>dx</option>
+            <option value='dy'>dy</option>
             <option value='xy'>xy</option>
             <option value='vx'>vx</option>
             <option value='vy'>vy</option>
-            <option value='dx'>dx</option>
-            <option value='dy'>dy</option>
             <option value='dt'>dt</option>
           </select>
         </label>
@@ -288,7 +288,7 @@ function App() {
           </select>
         </label>
       </form>
-      <p>drag while holding ctrl to zoom in the selected area.</p>
+      <p>Drag while holding ctrl to zoom in the selected area.</p>
       <p>Change DecimationMethod to lttb for performance problem.</p>
     </div>
   );
