@@ -102,8 +102,8 @@ function App() {
     dt: { x: 't' as const, y: 'dt' as const },
   };
 
-  const clear_data = () => {
-    invoke('log_restart');
+  const clear_data = async () => {
+    await invoke('log_restart');
     mouseDatabase.current!.clear();
   }
 

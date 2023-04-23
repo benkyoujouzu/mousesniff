@@ -41,7 +41,7 @@ export class MouseData {
             new_data = { ...d, 
                 x: d.dx, 
                 y: d.dy, 
-                dt: dt, 
+                dt: 0, 
                 vx: dt === 0 ? NaN : d.dx / dt, 
                 vy: dt === 0 ? NaN : d.dy / dt
             };
