@@ -220,11 +220,11 @@ function App() {
   return (
     <div>
       <Chart type='line' ref={chartRef} data={make_mouse_dataset(rawData, smoothedData, showLine)} options={chartOptions} />
-      <form>
-        <button onClick={() => { toggle_start }}>{started ? 'Stop (S)' : 'Start (S)'}</button>
+      <div>
+        <button onClick={toggle_start}>{started ? 'Stop (S)' : 'Start (S)'}</button>
         <button onClick={toggle_freeze}>{freezed ? 'Realtime (F)' : 'Freeze (F)'}</button>
         <button onClick={clear_data}>Reset (R)</button>
-        <button onClick={() => { resetZoom(); }}>ResetZoom (Z)</button>
+        <button onClick={resetZoom}>ResetZoom (Z)</button>
         <br />
         <label>Data:
           <select
@@ -287,7 +287,7 @@ function App() {
             <option value={'lttb'}>lttb</option>
           </select>
         </label>
-      </form>
+      </div>
       <p>Drag while holding ctrl to zoom in the selected area.</p>
       <p>Change DecimationMethod to lttb for performance problem.</p>
     </div>

@@ -68,7 +68,7 @@ export class MouseData {
             const dx = this.smooth_buffer.reduce((sum, p) => (sum + p.dx), 0);
             const dy = this.smooth_buffer.reduce((sum, p) => (sum + p.dy), 0);
             const last_smoothed_data = this.smoothed_data[this.smoothed_data.length - 1];
-            const dt = last_smoothed_data === undefined ? new_frame_time : new_frame_time - this.last_frame_time;
+            const dt = last_smoothed_data === undefined ? 0 : new_frame_time - this.last_frame_time;
             const x = last_smoothed_data === undefined ? dx : last_smoothed_data.x + dx;
             const y = last_smoothed_data === undefined ? dy : last_smoothed_data.y + dy;
             const vx = dt === 0 ? NaN : dx / dt;
