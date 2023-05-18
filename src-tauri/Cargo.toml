@@ -21,7 +21,7 @@ wry = { version = ">=0.0.0", default-features = false, features = [ "file-drop",
 tauri-runtime-wry = { version = ">=0.0.0" }
 serde = { version = ">=0.0.0", features = ["derive"] }
 serde_json = { version = ">=0.0.0" }
-multiinput = { git = "https://github.com/Jonesey13/multiinput-rust" }
+#multiinput = { git = "https://github.com/Jonesey13/multiinput-rust" }
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

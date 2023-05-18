@@ -1360,7 +1360,6 @@ dependencies = [
 name = "mousesniff"
 version = "0.0.0"
 dependencies = [
- "multiinput",
  "serde",
  "serde_json",
  "tao 0.16.0",
@@ -1369,14 +1368,6 @@ dependencies = [
  "tauri-runtime",
  "tauri-runtime-wry",
  "wry 0.24.1",
-]
-
-[[package]]
-name = "multiinput"
-version = "0.1.0"
-source = "git+https://github.com/Jonesey13/multiinput-rust#9a76c183b3d783d37a2ec7a8a5771568b7a51c2c"
-dependencies = [
- "winapi",
 ]
 
 [[package]]

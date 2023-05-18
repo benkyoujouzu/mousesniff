@@ -33,7 +33,7 @@ export class MouseData {
         }
 
     public push(point: MouseRawData) {
-        let d = { ...point, t: point.t / 1000.0 };
+        let d = { ...point, t: point.t };
         let new_data: MouseDataPoint;
         const last_data = this.data[this.data.length - 1];
         if (last_data === undefined) {

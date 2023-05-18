@@ -132,7 +132,7 @@ function App() {
   useInterval(async () => {
     const d: MouseRawData[] = await invoke("get_mouse_data");
     if (!freezed || started) {
-      d.map((x) => { mouseDatabase.current.push(x) });
+      d.map((x) => { mouseDatabase.current.push({...x, t: x.t / 1000.0}) });
     }
     if (!freezed) {
       const axes = select_axes[dataSelect];
@@ -209,6 +209,24 @@ function App() {
     link.click();
   };
 
+  const importRawData = (e: ChangeEvent<HTMLInputElement>) => {
+    const fileReader = new FileReader();
+    fileReader.onloadend = async () => {
+      if(typeof fileReader.result === 'string' ){
+        console.log("e.target.result", fileReader.result);
+        await clear_data();
+        const rawData = JSON.parse(fileReader.result);
+        rawData.map((d : any) => mouseDatabase.current.push(d));
+        const axes = select_axes[dataSelect];
+        setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+        setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+      }
+    };
+    if (e.target.files != null) {
+      fileReader.readAsText(e.target?.files[0], "UTF-8");
+    }
+  };
+
   const exportSmoothedData = () => {
     const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(mouseDatabase.current!.smoothed_data))}`;
     const link = document.createElement("a");
@@ -277,6 +295,10 @@ function App() {
         <br />
         <button onClick={exportRawData}>ExportRawData</button>
         <button onClick={exportSmoothedData}>ExportSmoothedData</button>
+        <br />
+        <label> ImportRawData
+          <input type='file' onChange={importRawData} accept='.json' />
+        </label>
         <br />
         <label>DecimationMethod:
           <select

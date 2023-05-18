@@ -13,9 +13,11 @@
     "@ant-design/charts": "^1.4.2",
     "@faker-js/faker": "^7.6.0",
     "@tauri-apps/api": "^1.2.0",
+    "@types/file-saver": "^2.0.5",
     "chart.js": "^4.2.1",
     "chartjs-plugin-zoom": "^2.0.1",
     "faker": "^6.6.6",
+    "file-saver": "^2.0.5",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0"
