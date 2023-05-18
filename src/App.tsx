@@ -89,6 +89,7 @@ function App() {
   const [started, setStarted] = useState(false);
   const [updateInterval, setUpdateInterval] = useState(200);
   const [maxLogDuration, setMaxLogDuration] = useState(10000);
+  const [exportFileName, setExportFileName] = useState('mouse_data');
   const chartRef = useRef<ChartJSOrUndefined<'line', Point[], unknown>>(null);
 
   const select_axes: { [key: string]: { x: keyof MouseDataPoint, y: keyof MouseDataPoint } } = {
@@ -116,6 +117,7 @@ function App() {
       clear_data();
     } else {
       setFreezed(true);
+      resetZoom();
     }
   }, [started]);
 
@@ -201,11 +203,11 @@ function App() {
     }
   }
 
-  const exportRawData = () => {
+  const exportRawData = (filename: string) => {
     const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(mouseDatabase.current!.data))}`;
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     link.href = jsonString;
-    link.download = "mouse_data.json";
+    link.download = filename + '.json';
     link.click();
   };
 
@@ -225,14 +227,6 @@ function App() {
     if (e.target.files != null) {
       fileReader.readAsText(e.target?.files[0], "UTF-8");
     }
-  };
-
-  const exportSmoothedData = () => {
-    const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(mouseDatabase.current!.smoothed_data))}`;
-    const link = document.createElement("a");
-    link.href = jsonString;
-    link.download = "smoothed_mouse_data.json";
-    link.click();
   };
 
   return (
@@ -293,8 +287,15 @@ function App() {
           ms
         </label>
         <br />
-        <button onClick={exportRawData}>ExportRawData</button>
-        <button onClick={exportSmoothedData}>ExportSmoothedData</button>
+        <label>FileName
+          <input
+            type='text'
+            value={exportFileName}
+            onChange={(e) => {setExportFileName(e.target.value);}}
+            style={{ width: "10em" }}
+          />
+        <button onClick={() => exportRawData(exportFileName)}>ExportRawData</button>
+        </label>
         <br />
         <label> ImportRawData
           <input type='file' onChange={importRawData} accept='.json' />
