@@ -90,6 +90,7 @@ function App() {
   const [updateInterval, setUpdateInterval] = useState(200);
   const [maxLogDuration, setMaxLogDuration] = useState(10000);
   const [exportFileName, setExportFileName] = useState('mouse_data');
+  const [pollingRate, setPollingRate] = useState(0);
   const chartRef = useRef<ChartJSOrUndefined<'line', Point[], unknown>>(null);
 
   const select_axes: { [key: string]: { x: keyof MouseDataPoint, y: keyof MouseDataPoint } } = {
@@ -140,6 +141,7 @@ function App() {
       const axes = select_axes[dataSelect];
       setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
       setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+      setPollingRate(mouseDatabase.current.polling_rate_buffer.length);
     }
   }, updateInterval);
 
@@ -237,6 +239,7 @@ function App() {
         <button onClick={toggle_freeze}>{freezed ? 'Realtime (F)' : 'Freeze (F)'}</button>
         <button onClick={clear_data}>Reset (R)</button>
         <button onClick={resetZoom}>ResetZoom (Z)</button>
+        PollingRate: {pollingRate}
         <br />
         <label>Data:
           <select

@@ -2,16 +2,12 @@
 
 use std::{
     sync::{Arc, Mutex},
-    thread::JoinHandle,
-    time::SystemTime,
-};
-use tao::{
-    self,
-    event::{DeviceEvent, Event},
-    event_loop::{ControlFlow, DeviceEventFilter, EventLoop},
-    platform::windows::EventLoopExtWindows,
+    thread::{self, JoinHandle},
+    time::{Duration, SystemTime},
 };
 use tauri::State;
+
+use rawinput_mouse::MouseRawInputManager;
 
 #[tauri::command]
 fn log_restart(state: State<Arc<Mutex<Database>>>) {
@@ -29,35 +25,19 @@ fn log_mouse_event(state: State<Arc<Mutex<Database>>>) {
         }
     }
     let handle = std::thread::spawn(move || {
-        let event_loop: EventLoop<()> = EventLoop::new_any_thread();
-        event_loop.set_device_event_filter(DeviceEventFilter::Never);
+        let input_manager = MouseRawInputManager::new();
 
-        event_loop.run(move |event, _, control_flow| {
-            *control_flow = ControlFlow::Wait;
-            match event {
-                Event::DeviceEvent {
-                    device_id: _,
-                    event,
-                    ..
-                } => match event {
-                    DeviceEvent::MouseMotion {
-                        delta: (dx, dy), ..
-                    } => {
-                        let mut db = s.lock().unwrap();
-                        let t = db.get_log_start_time().elapsed().unwrap().as_micros() as i64;
-                        let mevent = MouseRawData {
-                            dx: dx as i32,
-                            dy: dy as i32,
-                            t,
-                        };
-                        db.push_mouse_data(mevent);
-                    }
-                    _ => (),
-                },
-                _ => (),
+        loop {
+            let event = input_manager.get_event();
+            let mut db = s.lock().unwrap();
+            let t = db.get_log_start_time().elapsed().unwrap().as_micros() as i64;
+            let mevent = MouseRawData {
+                dx: event.dx as i32,
+                dy: event.dy as i32,
+                t,
             };
-            ()
-        });
+            db.push_mouse_data(mevent);
+        }
     });
 
     let mut db = (*state).lock().unwrap();
