@@ -112,7 +112,7 @@ fn register_mouse_raw_input(hwnd: HWND) {
 }
 
 fn get_event_buffered(event_queue: &mut VecDeque<MouseRawEvent>) -> Option<MouseRawEvent> {
-    if event_queue.is_empty() {
+    while event_queue.is_empty() {
         win_get_event(event_queue);
     }
     let event = event_queue.pop_front();
