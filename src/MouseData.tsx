@@ -19,6 +19,7 @@ export class MouseData {
     data: MouseDataPoint[] = [];
     smooth_buffer: MouseRawData[] = [];
     smoothed_data: MouseDataPoint[] = [];
+    polling_rate_buffer: MouseRawData[] = [];
     smooth_time: number = 1000 / 144;
     last_frame_time: number = 0;
     duration: number = 10000.0;
@@ -29,6 +30,9 @@ export class MouseData {
             }
             while (this.smoothed_data.length > 0 && this.smoothed_data[this.smoothed_data.length - 1].t - this.smoothed_data[0].t > this.duration) {
                 this.smoothed_data.shift();
+            }
+            while (this.polling_rate_buffer.length > 0 && this.polling_rate_buffer[this.polling_rate_buffer.length - 1].t - this.polling_rate_buffer[0].t > 1000) {
+                this.polling_rate_buffer.shift();
             }
         }
 
@@ -58,6 +62,7 @@ export class MouseData {
         }
         this.data.push(new_data);
         this.smooth_push(d);
+        this.polling_rate_buffer.push(d);
         this.drop();
     }
 
@@ -97,6 +102,7 @@ export class MouseData {
         this.data = [];
         this.smooth_buffer = [];
         this.smoothed_data = [];
+        this.polling_rate_buffer = [];
         this.last_frame_time = 0;
     }
 
