@@ -17,7 +17,7 @@ The example below shows that the performance fluctuation of a series of mouse in
 
 # Data Description
 
-- dx and dy are the mouse input obtained from the GetRawInputData API (using [tao](https://github.com/tauri-apps/tao)).
+- dx and dy are the mouse input obtained from the GetRawInputBuffer API (by modifying [rawinput-rust](https://github.com/Jonesey13/rawinput-rust)).
 - x and y are sums of dx and dy since log started.
 - dt is the time between two input data. 
 - vx = dx / dt, vy = dy / dt.
