@@ -48,9 +48,6 @@ const zoomOption: ZoomPluginOptions = {
 
 const CHARTOPTION: ChartOptions<'line'> = {
   interaction: {
-    mode: "nearest" as const,
-    axis: "x" as const,
-    intersect: false as const,
   },
   normalized: true,
   parsing: false,
