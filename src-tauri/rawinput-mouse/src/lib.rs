@@ -1,7 +1,7 @@
 use std::ffi::{c_void, OsStr};
 use std::mem::size_of;
 use std::os::windows::prelude::OsStrExt;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::{collections::VecDeque, thread::JoinHandle};
 use std::{mem, thread};
 use windows::Win32::Devices::HumanInterfaceDevice::{
@@ -24,7 +24,6 @@ use windows::{
 };
 enum Command {
     Exit,
-    GetEvent,
 }
 
 pub struct MouseRawEvent {
@@ -36,54 +35,6 @@ pub struct MouseRawInputManager {
     receiver: Receiver<MouseRawEvent>,
     sender: Sender<Command>,
     joiner: Option<JoinHandle<()>>,
-}
-
-fn win_get_event(tx: &Sender<MouseRawEvent>) {
-    unsafe {
-        let mut array_alloc: [u8; 8192] = mem::MaybeUninit::uninit().assume_init();
-        loop {
-            // let mut numberofelements: i32 = GetRawInputBuffer(
-            //     None,
-            //     &mut buffer_size,
-            //     mem::size_of::<RAWINPUTHEADER>() as u32,
-            // ) as i32;
-            // if numberofelements as i32 == -1 {
-            //     panic!("GetRawInputBuffer Gave Error on First Call!");
-            // }
-            let mut buffer_size = array_alloc.len() as u32;
-            let mut numberofelements = GetRawInputBuffer(
-                Some(array_alloc.as_mut_ptr() as *mut RAWINPUT),
-                //&mut buffer_size,
-                &mut buffer_size,
-                mem::size_of::<RAWINPUTHEADER>() as u32,
-            ) as i32;
-
-            // println!("number of elements, {}", numberofelements);
-
-            if numberofelements as i32 == 0 {
-                return;
-            }
-
-            if numberofelements as i32 == -1 {
-                panic!("GetRawInputBuffer Gave Error!");
-            }
-
-            let mut array_ptr = array_alloc.as_mut_ptr();
-
-            for _ in 0..numberofelements as u32 {
-                let first_elem = *(array_ptr as *mut RAWINPUT);
-                if first_elem.header.dwType == RIM_TYPEMOUSE.0 {
-                    let raw_data = first_elem.data.mouse;
-                    let data = MouseRawEvent {
-                        dx: raw_data.lLastX,
-                        dy: raw_data.lLastY,
-                    };
-                    tx.send(data).unwrap();
-                }
-                array_ptr = array_ptr.offset(first_elem.header.dwSize as isize);
-            }
-        }
-    }
 }
 
 pub unsafe extern "system" fn call_default_window_proc(
@@ -107,7 +58,7 @@ pub unsafe extern "system" fn call_default_window_proc(
                 &mut data_size,
                 header_size,
             );
-            if (status > 0 && data.header.dwType == RIM_TYPEMOUSE.0) {
+            if status > 0 && data.header.dwType == RIM_TYPEMOUSE.0 {
                 let raw_data = data.data.mouse;
                 let data = MouseRawEvent {
                     dx: raw_data.lLastX,
@@ -116,7 +67,6 @@ pub unsafe extern "system" fn call_default_window_proc(
                 tx.send(data).unwrap();
             }
         }
-        win_get_event(&tx);
         Box::into_raw(tx);
     }
     DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -209,6 +159,13 @@ impl MouseRawInputManager {
                     }
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
+                    match rxc.try_recv() {
+                        Ok(c) => match c {
+                            Command::Exit => break,
+                        },
+                        Err(TryRecvError::Disconnected) => break,
+                        _ => (),
+                    }
                 }
 
                 let tx_ptr = GetWindowLongPtrW(hwnd, GWL_USERDATA) as *mut Sender<MouseRawEvent>;
@@ -231,13 +188,13 @@ impl MouseRawInputManager {
 
 impl Drop for MouseRawInputManager {
     fn drop(&mut self) {
+        self.sender.send(Command::Exit).unwrap();
         self.joiner.take().unwrap().join().unwrap();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn it_works() {
