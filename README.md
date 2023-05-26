@@ -17,7 +17,7 @@ The example below shows that the performance fluctuation of a series of mouse in
 
 # Data Description
 
-- dx and dy are the mouse input obtained from the GetRawInputBuffer API (implemented as [Unity Documentation](https://docs.unity3d.com/ScriptReference/Windows.Input.ForwardRawInput.html)).
+- dx and dy are the mouse input obtained from the GetRawInputData API (by modifying [rawinput-rust](https://github.com/Jonesey13/rawinput-rust)).
 - x and y are sums of dx and dy since log started.
 - dt is the time between two input data. 
 - vx = dx / dt, vy = dy / dt.
