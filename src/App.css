@@ -2,21 +2,6 @@
   filter: drop-shadow(0 0 2em #747bff);
 }
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
-
-label {
-  white-space: nowrap;
-  margin-right: 0.5em;
-  margin-bottom: 0.5em;
-}
-
-button {
-  margin-right: 0.5em;
-  margin-bottom: 0.5em;
-}
-
-input {
-  margin-bottom: 0.5em;
+.logo.solid:hover {
+  filter: drop-shadow(0 0 2em #2f5d90);
 }

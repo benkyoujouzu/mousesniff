@@ -15,7 +15,7 @@ use windows::Win32::UI::Input::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
     GetWindowLongPtrW, RegisterClassExW, SetWindowLongPtrW, TranslateMessage, GWL_USERDATA,
-    WINDOW_EX_STYLE, WINDOW_STYLE, WM_INPUT,
+    WINDOW_EX_STYLE, WINDOW_STYLE, WM_INPUT, WS_VISIBLE, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::{
     self,
@@ -102,9 +102,11 @@ fn create_window_class() -> HWND {
 
         hwnd = CreateWindowExW(
             WINDOW_EX_STYLE::default(),
+            // WS_EX_TOPMOST,
             PCWSTR::from_raw(classname.as_ptr()),
             PCWSTR::from_raw(classname.as_ptr()),
             WINDOW_STYLE::default(),
+            // WS_VISIBLE,
             0,
             0,
             0,

@@ -1,5 +1,6 @@
 import { ChartOptions, DecimationOptions } from "chart.js";
 import { ZoomPluginOptions } from "chartjs-plugin-zoom/types/options";
+import { Point } from "chart.js";
 
 const DECIMATION_MINMAX: DecimationOptions = {
   enabled: true as const,
@@ -90,4 +91,28 @@ export function make_chart_options(dataSelect: string, decimationMethod: 'none' 
     const decimation = dataSelect === 'xy' ? undefined : DECIMATION_OPTIONS[decimationMethod];
     options!.plugins!.decimation = decimation;
     return options;
+}
+
+export function make_mouse_dataset(rawData: Point[], smoothedData: Point[], showLine: boolean) {
+  return {
+    labels: [],
+    datasets: [
+      {
+        hidden: true,
+        showLine: showLine,
+        label: "raw",
+        data: rawData,
+        borderColor: 'rgb(53, 162, 235)',
+        pointStyle: 'rect',
+        backgroundColor: 'rgba(53, 162, 235, 0.5)',
+      },
+      {
+        showLine: showLine,
+        label: "smoothed",
+        data: smoothedData,
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+      }
+    ]
+  };
 }

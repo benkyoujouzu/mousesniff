@@ -1,7 +1,9 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";;
+import { JSX, Component, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { MouseData, MouseRawData, MouseDataPoint } from './MouseData';
 import { invoke } from "@tauri-apps/api/tauri";
+import "./App.css";
 import {
-  Chart as ChartJS,
+  Chart,
   PointElement,
   LineElement,
   LineController,
@@ -14,14 +16,10 @@ import {
   Decimation,
   Point,
 } from 'chart.js';
-import { Chart } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
-import "./App.css";
-import { MouseData, MouseRawData, MouseDataPoint } from './MouseData';
-import { ChartJSOrUndefined } from "react-chartjs-2/dist/types";
-import { make_chart_options } from "./utils";
+import { make_chart_options, make_mouse_dataset } from "./utils";
 
-ChartJS.register(
+Chart.register(
   PointElement,
   LineElement,
   LineController,
@@ -35,128 +33,120 @@ ChartJS.register(
   zoomPlugin,
 );
 
-function useInterval(callback: () => void, delay: number) {
-  const savedCallback = useRef<() => void>(callback);
+const select_axes: { [key: string]: { x: keyof MouseDataPoint, y: keyof MouseDataPoint } } = {
+  x: { x: 't' as const, y: 'x' as const },
+  y: { x: 't' as const, y: 'y' as const },
+  xy: { x: 'x' as const, y: 'y' as const },
+  dx: { x: 't' as const, y: 'dx' as const },
+  dy: { x: 't' as const, y: 'dy' as const },
+  vx: { x: 't' as const, y: 'vx' as const },
+  vy: { x: 't' as const, y: 'vy' as const },
+  dt: { x: 't' as const, y: 'dt' as const },
+};
 
-  useEffect(() => {
-    savedCallback.current = callback;
+const App: Component = () => {
+  const mouseDatabase = new MouseData();
+  const [updateInterval, setUpdateInterval] = createSignal(200);
+  const [maxLogDuration, setMaxLogDuration] = createSignal(10000);
+  const [freezed, setFreezed] = createSignal(true);
+  const [started, setStarted] = createSignal(false);
+  const [showLine, setShowLine] = createSignal(true);
+  const [dataSelect, setDataSelect] = createSignal('x');
+  const [pollingRate, setPollingRate] = createSignal(0);
+  const [smoothFPS, setSmoothFPS] = createSignal(144);
+  const [exportFileName, setExportFileName] = createSignal('mouse_data');
+  const [decimationMethod, setDecimationMethod] = createSignal<'none' | 'min-max' | 'lttb'>('min-max');
+
+  let chartRef: HTMLCanvasElement;
+  let chart: Chart<'line'>;
+
+  onMount(() => {
+    chart = new Chart(chartRef, {type: 'line', data: make_mouse_dataset([], [], true), options: make_chart_options('x', 'min-max')});
+    window.addEventListener('keydown', onKeyDown);
   });
 
-  useEffect(() => {
-    function tick() {
-      savedCallback.current();
+  let updateHandler: ReturnType<typeof setInterval>;
+  onCleanup(() => {
+    window.removeEventListener('keydown', onKeyDown);
+    clearInterval(updateHandler);
+  });
+  
+  const chartDataUpdate = () => {
+    const axes = select_axes[dataSelect()];
+    let rawData = mouseDatabase.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
+    let smoothedData = mouseDatabase.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } });
+    const pollingRate = mouseDatabase.polling_rate_buffer.length;
+    setPollingRate(pollingRate);
+    chart.data.datasets[0].data = rawData;
+    chart.data.datasets[1].data = smoothedData;
+    chart.update();
+  };
+
+  createEffect(on(updateInterval, (updateInterval) => {
+    if (updateHandler != null) {
+      clearInterval(updateHandler);
     }
 
-    let id = setInterval(tick, delay);
-    return () => clearInterval(id);
-  }, [delay]);
-}
-
-function make_mouse_dataset(rawData: Point[], smoothedData: Point[], showLine: boolean) {
-  return {
-    labels: [],
-    datasets: [
-      {
-        hidden: true,
-        showLine: showLine,
-        label: "raw",
-        data: rawData,
-        borderColor: 'rgb(53, 162, 235)',
-        pointStyle: 'rect',
-        backgroundColor: 'rgba(53, 162, 235, 0.5)',
-      },
-      {
-        showLine: showLine,
-        label: "smoothed",
-        data: smoothedData,
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+    updateHandler = setInterval(async () => {
+      const d: MouseRawData[] = await invoke("get_mouse_data");
+      if (!freezed() || started()) {
+        d.map((x) => { mouseDatabase.push({ ...x, t: x.t / 1000.0 }) });
       }
-    ]
-  };
-}
+      if (!freezed()) {
+        chartDataUpdate();
+      }
+    }, updateInterval);
+  }));
 
-function App() {
-  const mouseDatabase = useRef<MouseData>(new MouseData());
-  const [decimationMethod, setDecimationMethod] = useState<'none' | 'min-max' | 'lttb'>('min-max');
-  const [showLine, setShowLine] = useState(true);
-  const [chartOptions, setChartOptions] = useState(make_chart_options('xy', 'min-max'));
-  const [rawData, setRawData] = useState<Point[]>([]);
-  const [smoothedData, setSmoothedData] = useState<Point[]>([]);
-  const [freezed, setFreezed] = useState(true);
-  const [dataSelect, setDataSelect] = useState('x');
-  const [smoothFPS, setSmoothFPS] = useState(144);
-  const [started, setStarted] = useState(false);
-  const [updateInterval, setUpdateInterval] = useState(200);
-  const [maxLogDuration, setMaxLogDuration] = useState(10000);
-  const [exportFileName, setExportFileName] = useState('mouse_data');
-  const [pollingRate, setPollingRate] = useState(0);
-  const chartRef = useRef<ChartJSOrUndefined<'line', Point[], unknown>>(null);
-
-  const select_axes: { [key: string]: { x: keyof MouseDataPoint, y: keyof MouseDataPoint } } = {
-    x: { x: 't' as const, y: 'x' as const },
-    y: { x: 't' as const, y: 'y' as const },
-    xy: { x: 'x' as const, y: 'y' as const },
-    dx: { x: 't' as const, y: 'dx' as const },
-    dy: { x: 't' as const, y: 'dy' as const },
-    vx: { x: 't' as const, y: 'vx' as const },
-    vy: { x: 't' as const, y: 'vy' as const },
-    dt: { x: 't' as const, y: 'dt' as const },
-  };
-
-  const clear_data = async () => {
-    await invoke('log_restart');
-    mouseDatabase.current!.clear();
-  }
-
-  useEffect(() => {
-    setChartOptions({ ...make_chart_options(dataSelect, decimationMethod) });
-  }, [dataSelect, decimationMethod]);
-
-  useEffect(() => {
-    if (started) {
+  createEffect(() => {
+    if (started()) {
       clear_data();
     } else {
       setFreezed(true);
       resetZoom();
     }
-  }, [started]);
+  });
 
-  useEffect(() => {
-    mouseDatabase.current.set_smooth_time(1000 / smoothFPS);
-  }, [smoothFPS]);
+  createEffect(() => {
+    chart.data.datasets[0].showLine = showLine();
+    chart.data.datasets[1].showLine = showLine();
+    chart.update();
+  });
 
-  useEffect(() => {
-    const axes = select_axes[dataSelect];
-    setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
-    setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
-  }, [dataSelect, smoothFPS, started]);
+  createEffect(() => {
+    const options = make_chart_options(dataSelect(), decimationMethod());
+    chart.options = options;
+    chart.update();
+  });
 
-  useInterval(async () => {
-    const d: MouseRawData[] = await invoke("get_mouse_data");
-    if (!freezed || started) {
-      d.map((x) => { mouseDatabase.current.push({...x, t: x.t / 1000.0}) });
-    }
-    if (!freezed) {
-      const axes = select_axes[dataSelect];
-      setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
-      setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
-      setPollingRate(mouseDatabase.current.polling_rate_buffer.length);
-    }
-  }, updateInterval);
+  createEffect(() => {
+    mouseDatabase.set_smooth_time(1000 / smoothFPS());
+  })
+
+  createEffect(() => {
+    started();
+    dataSelect();
+    smoothFPS();
+    chartDataUpdate();
+  })
+
+  const toggle_freeze = () => {
+    setFreezed(freezed => !freezed);
+  }
 
   const toggle_start = () => {
     setStarted(started => !started);
   };
 
-  const toggle_freeze = () => {
-    setFreezed(freezed => !freezed);
-  };
-
   const resetZoom = () => {
-    chartRef.current!.resetZoom();
+    chart.resetZoom();
   }
 
+  const clear_data = async () => {
+    await invoke('log_restart');
+    mouseDatabase.clear();
+  }
+    
   const onKeyDown = (e: KeyboardEvent) => {
     switch (e.code) {
       case 'KeyS':
@@ -174,56 +164,44 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  useEffect(() => {
-    invoke('log_mouse_event');
-  }, []);
-
-  const onSmoothFPSChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const onSmoothFPSChange: JSX.ChangeEventHandler<HTMLInputElement, Event> = (e) => {
     let v = parseInt(e.target.value);
     if (!isNaN(v) && v > 0) {
       setSmoothFPS(v);
     }
   }
 
-  const onUpdateIntervalChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const onUpdateIntervalChange: JSX.ChangeEventHandler<HTMLInputElement, Event> = (e) => {
     let v = parseInt(e.target.value);
     if (!isNaN(v) && v > 0) {
       setUpdateInterval(v);
     }
   }
-
-  const onMaxLogDurationChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const onMaxLogDurationChange: JSX.ChangeEventHandler<HTMLInputElement, Event> = (e) => {
     let v = parseInt(e.target.value);
     if (!isNaN(v) && v > 0) {
       setMaxLogDuration(v);
-      mouseDatabase.current!.set_duration(v);
+      mouseDatabase.set_duration(v);
     }
   }
 
   const exportRawData = (filename: string) => {
-    const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(mouseDatabase.current!.data))}`;
+    const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(mouseDatabase.data))}`;
     const link = document.createElement('a');
     link.href = jsonString;
     link.download = filename + '.json';
     link.click();
   };
 
-  const importRawData = (e: ChangeEvent<HTMLInputElement>) => {
+  const importRawData: JSX.ChangeEventHandler<HTMLInputElement, Event> = (e) => {
     const fileReader = new FileReader();
     fileReader.onloadend = async () => {
       if(typeof fileReader.result === 'string' ){
         console.log("e.target.result", fileReader.result);
         await clear_data();
         const rawData = JSON.parse(fileReader.result);
-        rawData.map((d : any) => mouseDatabase.current.push(d));
-        const axes = select_axes[dataSelect];
-        setRawData(mouseDatabase.current.data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
-        setSmoothedData(mouseDatabase.current.smoothed_data.map((d) => { return { x: d[axes.x], y: d[axes.y] } }));
+        rawData.map((d : any) => mouseDatabase.push(d));
+        chartDataUpdate();
       }
     };
     if (e.target.files != null) {
@@ -231,19 +209,21 @@ function App() {
     }
   };
 
+  invoke('log_mouse_event');
+
   return (
     <div>
-      <Chart type='line' ref={chartRef} data={make_mouse_dataset(rawData, smoothedData, showLine)} options={chartOptions} />
+      <canvas ref={chartRef!} />
       <div>
-        <button onClick={toggle_start}>{started ? 'Stop (S)' : 'Start (S)'}</button>
-        <button onClick={toggle_freeze}>{freezed ? 'Realtime (F)' : 'Freeze (F)'}</button>
+        <button onClick={toggle_start}>{started() ? 'Stop (S)' : 'Start (S)'}</button>
+        <button onClick={toggle_freeze}>{freezed() ? 'Realtime (F)' : 'Freeze (F)'}</button>
         <button onClick={clear_data}>Reset (R)</button>
         <button onClick={resetZoom}>ResetZoom (Z)</button>
-        PollingRate: {pollingRate}
+        PollingRate: {pollingRate()}
         <br />
         <label>Data:
           <select
-            value={dataSelect}
+            value={dataSelect()}
             onChange={(e) => setDataSelect(e.target.value)}
           >
             <option value='x'>x</option>
@@ -259,14 +239,14 @@ function App() {
         <label>ShowLine:
           <input
             type='checkbox'
-            checked={showLine}
+            checked={showLine()}
             onChange={() => setShowLine(showLine => !showLine)}
           />
         </label>
         <label>SmoothFPS:
           <input
             type='text'
-            value={smoothFPS}
+            value={smoothFPS()}
             onChange={onSmoothFPSChange}
             style={{ width: "3em" }}
           />
@@ -274,7 +254,7 @@ function App() {
         <label>UpdateInterval:
           <input
             type='text'
-            value={updateInterval}
+            value={updateInterval()}
             onChange={onUpdateIntervalChange}
             style={{ width: "3em" }}
           />
@@ -283,7 +263,7 @@ function App() {
         <label>MaxLogTime:
           <input
             type='text'
-            value={maxLogDuration}
+            value={maxLogDuration()}
             onChange={onMaxLogDurationChange}
             style={{ width: "5em" }}
           />
@@ -293,11 +273,11 @@ function App() {
         <label>FileName
           <input
             type='text'
-            value={exportFileName}
+            value={exportFileName()}
             onChange={(e) => {setExportFileName(e.target.value);}}
             style={{ width: "10em" }}
           />
-        <button onClick={() => exportRawData(exportFileName)}>ExportRawData</button>
+        <button onClick={() => exportRawData(exportFileName())}>ExportRawData</button>
         </label>
         <br />
         <label> ImportRawData
@@ -306,7 +286,7 @@ function App() {
         <br />
         <label>DecimationMethod:
           <select
-            value={decimationMethod}
+            value={decimationMethod()}
             onChange={(e) => { const v = e.target.value; if (v === 'none' || v === 'min-max' || v === 'lttb') setDecimationMethod(v); }}>
             <option value={'none'}>none</option>
             <option value={'min-max'}>min-max</option>
