@@ -3,25 +3,20 @@ name = "mousesniff"
 version = "0.0.0"
 description = "A Tauri App"
 authors = ["you"]
-license = ""
-repository = ""
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "1.2.1", features = [] }
+tauri-build = { version = "2.0.0-beta", features = [] }
 
 [dependencies]
-tauri = { version = "1.2.4", features = ["shell-open"] }
-tauri-runtime = { version = ">=0.0.0" }
-wry = { version = ">=0.0.0", default-features = false, features = [ "file-drop", "protocol" ] }
-tauri-runtime-wry = { version = ">=0.0.0" }
-serde = { version = ">=0.0.0", features = ["derive"] }
-serde_json = { version = ">=0.0.0" }
-rawinput-mouse = { path = "rawinput-mouse" }
+tauri = { version = "2.0.0-beta", features = [] }
+tauri-plugin-shell = "2.0.0-beta"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-runtime-wry = "2.0.0-beta"
+wry = "0.38.1"
+tao = "0.26.1"
+tauri-runtime = "2.0.0-beta"
 
-[features]
-# this feature is used for production builds or when `devPath` points to the filesystem
-# DO NOT REMOVE!!
-custom-protocol = ["tauri/custom-protocol"]

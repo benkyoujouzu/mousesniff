@@ -1,6 +1,6 @@
 import { JSX, Component, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { MouseData, MouseRawData, MouseDataPoint } from './MouseData';
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import {
   Chart,
@@ -209,7 +209,7 @@ const App: Component = () => {
     }
   };
 
-  invoke('log_mouse_event');
+
 
   return (
     <div>
